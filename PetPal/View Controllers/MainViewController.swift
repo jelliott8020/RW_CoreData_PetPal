@@ -28,24 +28,72 @@
 * THE SOFTWARE.
 */
 
+// New syntax
+// \Friend.name
+// Old syntax
+// #keyPath(Friend.name)
+
+
+//
+// https://www.hackingwithswift.com/read/38/4/creating-an-nsmanagedobject-subclass-with-xcode
+//
+
+
+// Predicates
+// NSPredicate(format: "date > %@", previousDate)
+// NSPredicate(format: "name == 'Ray'")
+// NSPredicate(format: "name like 'Ra'")
+// NSPredicate(format: "name CONTAINS[cd] %@", query)
+// [cd] = ignore case, ignore diacritics
+
 import UIKit
+import CoreData
 
 class MainViewController: UIViewController {
 	@IBOutlet private weak var collectionView:UICollectionView!
-	
-	private var friends = [String]()
-	private var filtered = [String]()
+    
+    
+    
+    
+    /** RAY WENDERLICH **/
+    private let appDelegate = UIApplication.shared.delegate as! AppDelegate
+    private let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+	/** RAY WENDERLICH **/
+    
+    
+    
+    
+    
+    
+	private var friends = [Friend]()
+	private var filtered = [Friend]()
 	private var isFiltered = false
 	private var friendPets = [String:[String]]()
 	private var selected:IndexPath!
 	private var picker = UIImagePickerController()
 	private var images = [String:UIImage]()
+    private var query = ""
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
 		picker.delegate = self
 	}
+    
+    
+    
+    
+    
+    /** RAY WENDERLICH **/
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        refresh()
+    }
+    /** RAY WENDERLICH **/
 
+    
+    
+    
+    
 	override func didReceiveMemoryWarning() {
 		super.didReceiveMemoryWarning()
 		// Dispose of any resources that can be recreated.
@@ -57,11 +105,11 @@ class MainViewController: UIViewController {
 			if let index = sender as? IndexPath {
 				let pvc = segue.destination as! PetsViewController
 				let friend = friends[index.row]
-				if let pets = friendPets[friend] {
+                if let pets = friendPets[friend.name!] {
 					pvc.pets = pets
 				}
 				pvc.petAdded = {
-					self.friendPets[friend] = pvc.pets
+                    self.friendPets[friend.name!] = pvc.pets
 				}
 			}
 		}
@@ -69,13 +117,25 @@ class MainViewController: UIViewController {
 
 	// MARK:- Actions
 	@IBAction func addFriend() {
-		var friend = FriendData()
-		while friends.contains(friend.name) {
-			friend = FriendData()
-		}
-		friends.append(friend.name)
-		let index = IndexPath(row:friends.count - 1, section:0)
-		collectionView?.insertItems(at: [index])
+        
+        
+        
+        /** RAY WENDERLICH **/
+		let data = FriendData()
+        let friend = Friend(entity: Friend.entity(), insertInto: context)
+        friend.name = data.name
+        friend.address = data.address
+        friend.dob = data.dob as Date
+        
+        friend.eyeColor = data.eyeColor
+        appDelegate.saveContext()
+        /** RAY WENDERLICH **/
+        
+        refresh()
+        collectionView.reloadData()
+        
+        showEditButton()
+		
 	}
 	
 	// MARK:- Private Methods
@@ -84,6 +144,34 @@ class MainViewController: UIViewController {
 			navigationItem.leftBarButtonItem = editButtonItem
 		}
 	}
+    
+    
+    
+    /** RAY WENDERLICH **/
+    private func refresh() {
+
+        
+        
+        // sorting
+        let request = Friend.fetchRequest() as NSFetchRequest<Friend>
+        
+        if !query.isEmpty {
+            request.predicate = NSPredicate(format: "name CONTAINS[cd] %@", query)
+        }
+        
+        //let sort = NSSortDescriptor(keyPath: \Friend.name, ascending: true)
+        let sort = NSSortDescriptor(key: #keyPath(Friend.name), ascending: true, selector: #selector(NSString.caseInsensitiveCompare(_:)))
+        request.sortDescriptors = [sort]
+        
+        
+        do {
+            friends = try context.fetch(request)
+        } catch let error as NSError {
+            print("Could not fetch. \(error), \(error.userInfo)")
+        }
+    }
+    /** RAY WENDERLICH **/
+    
 }
 
 // Collection View Delegates
@@ -96,8 +184,11 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDataSour
 	func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
 		let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "FriendCell", for: indexPath) as! FriendCell
 		let friend = isFiltered ? filtered[indexPath.row] : friends[indexPath.row]
-		cell.nameLabel.text = friend
-		if let image = images[friend] {
+        cell.nameLabel.text = friend.name!
+        cell.addressLabel.text = friend.address!
+        cell.ageLabel.text = "Age: \(friend.age)"
+        cell.eyeColorView.backgroundColor = friend.eyeColor as? UIColor
+        if let image = images[friend.name!] {
 			cell.pictureImageView.image = image
 		}
 		return cell
@@ -116,22 +207,28 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDataSour
 // Search Bar Delegate
 extension MainViewController:UISearchBarDelegate {
 	func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-		guard let query = searchBar.text else {
+		
+        /** RAY WENDERLICH **/
+        guard let txt = searchBar.text else {
 			return
 		}
-		isFiltered = true
-		filtered = friends.filter({(txt) -> Bool in
-			return txt.contains(query)
-		})
+        
+        query = txt
+        
+        refresh()
+        /** RAY WENDERLICH **/
+        
+
 		searchBar.resignFirstResponder()
 		collectionView.reloadData()
 	}
 	
 	func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-		isFiltered = false
-		filtered.removeAll()
+        query = ""
+
 		searchBar.text = nil
 		searchBar.resignFirstResponder()
+        refresh()
 		collectionView.reloadData()
 	}
 }
@@ -144,7 +241,7 @@ let info = convertFromUIImagePickerControllerInfoKeyDictionary(info)
 
 		let image = info[convertFromUIImagePickerControllerInfoKey(UIImagePickerController.InfoKey.originalImage)] as! UIImage
 		let friend = isFiltered ? filtered[selected.row] : friends[selected.row]
-		images[friend] = image
+        images[friend.name!] = image
 		collectionView?.reloadItems(at: [selected])
 		picker.dismiss(animated: true, completion: nil)
 	}
